@@ -2,6 +2,7 @@ import sys
 from typing import List
 from PyQt5.QtWidgets import QApplication, QWidget
 from PyQt5.QtGui import QPainter
+from PyQt5.QtCore import Qt
 
 from rectangle import Rectangle
 from connection import Connection
@@ -21,6 +22,13 @@ class MainWindow(QWidget):
 
         self.setWindowTitle("Collision of rectangles")
         self.setGeometry(50, 50, app_width, app_height)
+
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            new_rect = Rectangle(x=event.x(), y=event.y(), height=self.rect_height)
+            self.rectangles.append(new_rect)
+            self.update()
 
 
     def paintEvent(self, event) -> None:
