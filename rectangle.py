@@ -4,6 +4,9 @@ from typing import List
 from PyQt5.QtGui import QPainter, QPen, QColor
 from PyQt5.QtCore import Qt, QRect, QPoint
 
+
+HIGHLIGHTED_BORDER_COLOR = Qt.black
+
 class Rectangle:
     def __init__(self, x: int, y: int, height: int = 40, colors: List[QColor] = []):
         self.height = height
@@ -21,12 +24,16 @@ class Rectangle:
         self.color = self.get_color(colors)
 
 
-    def move(self, x, y) -> None:
+    def move(self, x: int, y: int) -> None:
         self.rect.moveCenter(QPoint(x, y))
 
 
-    def contains(self, point) -> bool:
+    def contains(self, point: QPoint) -> bool:
         return self.rect.contains(point)
+
+
+    def intersects(self, rect: "Rectangle") -> bool:
+        return self.rect.intersects(rect.rect)
 
 
     def center(self) -> QPoint:
@@ -35,10 +42,12 @@ class Rectangle:
 
     def draw(self, painter: QPainter) -> None:
         painter.setBrush(self.color)
+
+        border_color = Qt.transparent
         if self.is_highlighted is True:
-            painter.setPen(QPen(QColor(255, 0, 0), 3, Qt.SolidLine))
-        else:
-            painter.setPen(QPen(Qt.black, 2, Qt.SolidLine))
+            border_color = HIGHLIGHTED_BORDER_COLOR
+
+        painter.setPen(QPen(border_color, 2, Qt.SolidLine))
         painter.drawRect(self.rect)
 
 
@@ -49,5 +58,6 @@ class Rectangle:
                 random.randint(0, 255),
                 random.randint(0, 255),
             )
-            if color not in colors:
+            reserved_colors = colors + [HIGHLIGHTED_BORDER_COLOR]
+            if color not in reserved_colors:
                 return color
