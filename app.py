@@ -2,7 +2,7 @@ import sys
 from typing import List
 from PyQt5.QtWidgets import QApplication, QWidget
 from PyQt5.QtGui import QPainter
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QPoint
 
 from rectangle import Rectangle
 from connection import Connection
@@ -22,6 +22,8 @@ class MainWindow(QWidget):
         self.connections: List[Connection] = []
 
         self.active_rectangle: Rectangle = None
+
+        self.offset: QPoint = QPoint()
 
         # Current rectangle selected for connection
         self.first_connection_rectangle: Rectangle = None
@@ -48,17 +50,19 @@ class MainWindow(QWidget):
 
 
     def mousePressEvent(self, event):
+        mouse_pos = event.pos()
         if event.button() == Qt.LeftButton:
             # Check if we are clicking on an existing rectangle
             for rect in self.rectangles:
-                if rect.contains(event.pos()):
+                if rect.contains(mouse_pos):
                     self.active_rectangle = rect
+                    self.offset = mouse_pos - rect.topLeft()
                     break
         elif event.button() == Qt.RightButton:
             # Start creating a connection between two rectangles or remove a connection
             clicked_connection = None
             for conn in self.connections:
-                if conn.contains(event.pos()):
+                if conn.contains(mouse_pos):
                     clicked_connection = conn
                     break
             if clicked_connection is not None:
@@ -66,7 +70,7 @@ class MainWindow(QWidget):
             else:
                 clicked_on_rectangle = False
                 for rect in self.rectangles:
-                    if rect.contains(event.pos()):
+                    if rect.contains(mouse_pos):
                         clicked_on_rectangle = True
                         if not self.first_connection_rectangle:
                             # Start the connection
@@ -103,6 +107,16 @@ class MainWindow(QWidget):
             self.update()
 
 
+    def mouseMoveEvent(self, event):
+        if self.active_rectangle:
+            new_top_left: QPoint = event.pos() - self.offset
+            new_top_left = self.limit_to_window(new_top_left)
+
+            self.active_rectangle.moveTo(new_top_left)
+
+            self.update()
+
+
     def mouseReleaseEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
             self.active_rectangle = None
@@ -111,7 +125,6 @@ class MainWindow(QWidget):
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
 
-        print(f'connections {self.connections}')
         for conn in self.connections:
             conn.draw(painter)
 
@@ -135,6 +148,22 @@ class MainWindow(QWidget):
             if rectangle != r and rectangle.intersects(r):
                 return True
         return False
+
+
+    def limit_to_window(self, pos: QPoint) -> QPoint:
+        # Prevents going outside the window in the OY axis
+        if pos.y() < 0:
+            pos.setY(0)
+        elif pos.y() + self.rect_height > self.height():
+            pos.setY(self.height() - self.rect_height)
+
+        # Prevents going outside the window in the OX axis
+        if pos.x() < 0:
+            pos.setX(0)
+        elif pos.x() + self.rect_width > self.width():
+            pos.setX(self.width() - self.rect_width)
+
+        return pos
 
 
 if __name__ == '__main__':

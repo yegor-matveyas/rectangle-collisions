@@ -40,6 +40,14 @@ class Rectangle:
         return self.rect.center()
 
 
+    def topLeft(self) -> QPoint:
+        return self.rect.topLeft()
+
+
+    def moveTo(self, to: QPoint) -> None:
+        self.rect.moveTo(to)
+
+
     def draw(self, painter: QPainter) -> None:
         painter.setBrush(self.color)
 
