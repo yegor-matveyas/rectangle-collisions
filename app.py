@@ -20,6 +20,8 @@ class MainWindow(QWidget):
         self.rectangles: List[Rectangle] = []
         self.connections: List[Connection] = []
 
+        self.active_rectangle: Rectangle = None
+
         self.setWindowTitle("Collision of rectangles")
         self.setGeometry(50, 50, app_width, app_height)
 
@@ -29,6 +31,20 @@ class MainWindow(QWidget):
             new_rect = Rectangle(x=event.x(), y=event.y(), height=self.rect_height)
             self.rectangles.append(new_rect)
             self.update()
+
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            # Check if we are clicking on an existing rectangle
+            for rect in self.rectangles:
+                if rect.contains(event.pos()):
+                    self.active_rectangle = rect
+                    break
+
+
+    def mouseReleaseEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            self.active_rectangle = None
 
 
     def paintEvent(self, event) -> None:
