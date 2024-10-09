@@ -28,7 +28,13 @@ class MainWindow(QWidget):
 
     def mouseDoubleClickEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
-            new_rect = Rectangle(x=event.x(), y=event.y(), height=self.rect_height)
+            colors = [r.color for r in self.rectangles]
+            new_rect = Rectangle(
+                x=event.x(),
+                y=event.y(),
+                height=self.rect_height,
+                colors=colors,
+            )
             self.rectangles.append(new_rect)
             self.update()
 
