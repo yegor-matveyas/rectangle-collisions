@@ -2,10 +2,11 @@ import sys
 from typing import List
 from PyQt5.QtWidgets import QApplication, QWidget
 from PyQt5.QtGui import QPainter
-from PyQt5.QtCore import Qt, QPoint
+from PyQt5.QtCore import Qt, QPoint, QRect
 
 from rectangle import Rectangle
 from connection import Connection
+from collision import Collision
 
 class MainWindow(QWidget):
     def __init__(
@@ -24,6 +25,9 @@ class MainWindow(QWidget):
         self.active_rectangle: Rectangle = None
 
         self.offset: QPoint = QPoint()
+        self.prev_position: QPoint = None
+        self.collision_x: Collision = None
+        self.collision_y: Collision = None
 
         # Current rectangle selected for connection
         self.first_connection_rectangle: Rectangle = None
@@ -109,11 +113,41 @@ class MainWindow(QWidget):
 
     def mouseMoveEvent(self, event):
         if self.active_rectangle:
+            # self.prev_position = self.active_rectangle.topLeft()
+
             new_top_left: QPoint = event.pos() - self.offset
             new_top_left = self.limit_to_window(new_top_left)
 
-            self.active_rectangle.moveTo(new_top_left)
-
+            closest_rectangle = self.find_closest_rectangle(new_top_left)
+            if closest_rectangle is not None:
+                current_top_left: QPoint = self.active_rectangle.topLeft()
+                closest_top_left: QPoint = closest_rectangle.topLeft()
+                if (
+                    new_top_left.x() < closest_top_left.x()
+                    and closest_top_left.x() < current_top_left.x()
+                ):
+                    self.collision_x = Collision(closest_rectangle, Collision.RL)
+                elif (
+                    current_top_left.x() < closest_top_left.x()
+                    and closest_top_left.x() < new_top_left.x()
+                ):
+                    self.collision_x = Collision(closest_rectangle, Collision.LR)
+                elif (
+                    new_top_left.y() < closest_top_left.y()
+                    and closest_top_left.y() < current_top_left.y()
+                ):
+                    self.collision_y = Collision(closest_rectangle, Collision.BT)
+                elif (
+                    current_top_left.y() < closest_top_left.y()
+                    and closest_top_left.y() < new_top_left.y()
+                ):
+                    self.collision_x = Collision(closest_rectangle, Collision.TB)
+                else:
+                    self.collision_x = None
+                    self.collision_y = None
+            else:
+                # No obstacles in the way
+                self.active_rectangle.moveTo(new_top_left)
             self.update()
 
 
@@ -164,6 +198,35 @@ class MainWindow(QWidget):
             pos.setX(self.width() - self.rect_width)
 
         return pos
+
+
+    def find_closest_rectangle(self, new_top_left: QPoint) -> Rectangle:
+        current_top_left = self.active_rectangle.topLeft()
+
+        area = QRect(
+            min(current_top_left.x(), new_top_left.x()),
+            min(current_top_left.y(), new_top_left.y()),
+            abs(current_top_left.x() - new_top_left.x()) + self.rect_width,
+            abs(current_top_left.y() - new_top_left.y()) + self.rect_height
+        )
+
+        closest_rectangle: Rectangle = None
+        min_distance = float('inf')
+
+        for rectangle in self.rectangles:
+            if rectangle != self.active_rectangle:
+                rect: QRect = rectangle.rect
+                if area.intersects(rect):
+                    distance = (
+                        (area.topLeft().x() - rect.topLeft().x()) ** 2
+                        + (area.topLeft().y() - rect.topLeft().y()) ** 2
+                    ) ** 0.5
+
+                    if distance < min_distance:
+                        min_distance = distance
+                        closest_rectangle = rect
+
+        return closest_rectangle
 
 
 if __name__ == '__main__':
