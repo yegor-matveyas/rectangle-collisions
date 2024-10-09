@@ -25,7 +25,6 @@ class MainWindow(QWidget):
         self.active_rectangle: Rectangle = None
 
         self.offset: QPoint = QPoint()
-        self.prev_position: QPoint = None
         self.collision_x: Collision = None
         self.collision_y: Collision = None
 
@@ -57,10 +56,13 @@ class MainWindow(QWidget):
         mouse_pos = event.pos()
         if event.button() == Qt.LeftButton:
             # Check if we are clicking on an existing rectangle
-            for rect in self.rectangles:
-                if rect.contains(mouse_pos):
-                    self.active_rectangle = rect
-                    self.offset = mouse_pos - rect.topLeft()
+            for rectangle in self.rectangles:
+                if rectangle.contains(mouse_pos):
+                    if rectangle != self.active_rectangle:
+                        self.reset_collisions()
+
+                    self.active_rectangle = rectangle
+                    self.offset = mouse_pos - rectangle.topLeft()
                     break
         elif event.button() == Qt.RightButton:
             # Start creating a connection between two rectangles or remove a connection
@@ -111,43 +113,248 @@ class MainWindow(QWidget):
             self.update()
 
 
-    def mouseMoveEvent(self, event):
+    def mouseMoveEvent(self, event) -> None:
         if self.active_rectangle:
-            # self.prev_position = self.active_rectangle.topLeft()
+            current_rect = self.active_rectangle.rect
 
             new_top_left: QPoint = event.pos() - self.offset
             new_top_left = self.limit_to_window(new_top_left)
 
             closest_rectangle = self.find_closest_rectangle(new_top_left)
-            if closest_rectangle is not None:
-                current_top_left: QPoint = self.active_rectangle.topLeft()
-                closest_top_left: QPoint = closest_rectangle.topLeft()
-                if (
-                    new_top_left.x() < closest_top_left.x()
-                    and closest_top_left.x() < current_top_left.x()
-                ):
-                    self.collision_x = Collision(closest_rectangle, Collision.RL)
-                elif (
-                    current_top_left.x() < closest_top_left.x()
-                    and closest_top_left.x() < new_top_left.x()
-                ):
-                    self.collision_x = Collision(closest_rectangle, Collision.LR)
-                elif (
-                    new_top_left.y() < closest_top_left.y()
-                    and closest_top_left.y() < current_top_left.y()
-                ):
-                    self.collision_y = Collision(closest_rectangle, Collision.BT)
-                elif (
-                    current_top_left.y() < closest_top_left.y()
-                    and closest_top_left.y() < new_top_left.y()
-                ):
-                    self.collision_x = Collision(closest_rectangle, Collision.TB)
-                else:
-                    self.collision_x = None
-                    self.collision_y = None
-            else:
-                # No obstacles in the way
+
+            # Point to which movement is possible
+            to: QPoint = None
+
+            # No obstacles on the path from the active rectangle to the cursor point
+            if (
+                closest_rectangle is None
+                and self.collision_y is None
+                and self.collision_x is None
+            ):
                 self.active_rectangle.moveTo(new_top_left)
+
+            # Presence of collision along the OX axis
+            elif (
+                closest_rectangle is None
+                and self.collision_y is None
+                and self.collision_x is not None
+            ):
+                collision_rect = self.collision_x.rectangle.rect
+                is_in_y_range = (
+                    collision_rect.top() - self.rect_height
+                    <= new_top_left.y()
+                    <= collision_rect.bottom()
+                )
+
+                if self.collision_x.direction == Collision.RL:
+                    if (
+                        new_top_left.x() < collision_rect.right()
+                        and is_in_y_range
+                    ):
+                        to = QPoint(collision_rect.right(), new_top_left.y())
+                        self.active_rectangle.moveTo(to)
+                    else:
+                        self.collision_x = None
+                        to = new_top_left
+                else:
+                    if (
+                        new_top_left.x() + self.rect_width > collision_rect.left()
+                        and is_in_y_range
+                    ):
+                        to = QPoint(collision_rect.left() - self.rect_width, new_top_left.y())
+                        self.active_rectangle.moveTo(to)
+                    else:
+                        self.collision_x = None
+                        to = new_top_left
+
+            # Presence of collision along the OY axis
+            elif (
+                closest_rectangle is None
+                and self.collision_y is not None
+                and self.collision_x is None
+            ):
+                collision_rect = self.collision_y.rectangle.rect
+                is_in_x_range = (
+                    collision_rect.left() - self.rect_width
+                    <= new_top_left.x()
+                    <= collision_rect.right()
+                )
+
+                if self.collision_y.direction == Collision.BT:
+                    if (
+                        new_top_left.y() < collision_rect.bottom()
+                        and is_in_x_range
+                    ):
+                        to = QPoint(new_top_left.x(), collision_rect.bottom())
+                    else:
+                        self.collision_y = None
+                        to = new_top_left
+                else:
+                    if (
+                        new_top_left.y() + self.rect_height > collision_rect.top()
+                        and is_in_x_range
+                    ):
+                        to = QPoint(new_top_left.x(), collision_rect.top() - self.rect_height)
+                    else:
+                        self.collision_y = None
+                        to = new_top_left
+
+            # Presence of only the closest rectangle
+            elif (
+                closest_rectangle is not None
+                and self.collision_y is None
+                and self.collision_x is None
+            ):
+                closest_rect = closest_rectangle.rect
+
+                if closest_rect.right() - current_rect.left() <= 1:
+                    self.collision_x = Collision(closest_rectangle, Collision.RL)
+                elif current_rect.right() - closest_rect.left() <= 1:
+                    self.collision_x = Collision(closest_rectangle, Collision.LR)
+                elif closest_rect.bottom() - current_rect.top() <= 1:
+                    self.collision_y = Collision(closest_rectangle, Collision.BT)
+                elif current_rect.bottom() - closest_rect.top() <= 1:
+                    self.collision_y = Collision(closest_rectangle, Collision.TB)
+
+            # Presence of the closest rectangle and collision along the OX axis
+            elif (
+                closest_rectangle is not None
+                and self.collision_y is None
+                and self.collision_x is not None
+            ):
+                closest_rect = closest_rectangle.rect
+                if closest_rect.bottom() - current_rect.top() <= 1:
+                    self.collision_y = Collision(closest_rectangle, Collision.BT)
+                elif current_rect.bottom() - closest_rect.top() <= 1:
+                    self.collision_y = Collision(closest_rectangle, Collision.TB)
+
+            # Presence of the closest rectangle and collision along the OY axis
+            elif (
+                closest_rectangle is not None
+                and self.collision_y is not None
+                and self.collision_x is None
+            ):
+                closest_rect = closest_rectangle.rect
+                if closest_rect.right() - current_rect.left() <= 1:
+                    self.collision_x = Collision(closest_rectangle, Collision.RL)
+                elif current_rect.right() - closest_rect.left() <= 1:
+                    self.collision_x = Collision(closest_rectangle, Collision.LR)
+
+            # Presence of the both collisions
+            elif (
+                self.collision_y is not None
+                and self.collision_x is not None
+            ):
+                rect_x = self.collision_x.rectangle.rect
+                rect_y = self.collision_y.rectangle.rect
+
+                # Collision handling in the upper left corner
+                if (
+                    self.collision_x.direction == Collision.RL
+                    and self.collision_y.direction == Collision.BT
+                ):
+                    if (
+                        new_top_left.x() > rect_x.right()
+                        and new_top_left.y() > rect_y.bottom()
+                    ):
+                        to = new_top_left
+                    elif (
+                        new_top_left.x() < rect_x.right()
+                        and new_top_left.y() > rect_y.bottom()
+                    ):
+                        to = QPoint(rect_x.right(), new_top_left.y())
+                        if new_top_left.y() > rect_x.bottom():
+                            self.reset_collisions()
+                    elif (
+                        new_top_left.x() > rect_x.right()
+                        and new_top_left.y() < rect_y.bottom()
+                    ):
+                        to = QPoint(new_top_left.x(), rect_y.bottom())
+                        if new_top_left.x() > rect_y.right():
+                            self.reset_collisions()
+
+                # Collision handling in the upper right corner
+                elif (
+                    self.collision_x.direction == Collision.LR
+                    and self.collision_y.direction == Collision.BT
+                ):
+                    current_x = new_top_left.x() + self.rect_width
+                    if (
+                        current_x < rect_x.left()
+                        and new_top_left.y() > rect_y.bottom()
+                    ):
+                        to = new_top_left
+                    elif (
+                        current_x > rect_x.left()
+                        and new_top_left.y() > rect_y.bottom()
+                    ):
+                        to = QPoint(rect_x.left() - self.rect_width, new_top_left.y())
+                        if new_top_left.y() > rect_x.bottom():
+                            self.reset_collisions()
+                    elif (
+                        current_x < rect_x.left()
+                        and new_top_left.y() < rect_y.bottom()
+                    ):
+                        to = QPoint(new_top_left.x(), rect_y.bottom())
+                        if new_top_left.x() < rect_y.left():
+                            self.reset_collisions()
+
+                # Collision handling in the lower left corner
+                elif (
+                    self.collision_x.direction == Collision.RL
+                    and self.collision_y.direction == Collision.TB
+                ):
+                    current_y = new_top_left.y() + self.rect_height
+                    if (
+                        new_top_left.x() > rect_x.right()
+                        and current_y < rect_y.top()
+                    ):
+                        to = new_top_left
+                    elif (
+                        new_top_left.x() < rect_x.right()
+                        and current_y < rect_y.top()
+                    ):
+                        to = QPoint(rect_x.right(), new_top_left.y())
+                        if current_y < rect_x.top():
+                            self.reset_collisions()
+                    elif (
+                        new_top_left.x() > rect_x.right()
+                        and current_y > rect_y.top()
+                    ):
+                        to = QPoint(new_top_left.x(), rect_y.top() - self.rect_height)
+                        if new_top_left.x() > rect_y.right():
+                            self.reset_collisions()
+
+                # Collision handling in the lower right corner
+                elif (
+                    self.collision_x.direction == Collision.LR
+                    and self.collision_y.direction == Collision.TB
+                ):
+                    current_x = new_top_left.x() + self.rect_width
+                    current_y = new_top_left.y() + self.rect_height
+                    if (
+                        current_x < rect_x.left()
+                        and current_y < rect_y.top()
+                    ):
+                        to = new_top_left
+                    elif (
+                        current_x > rect_x.left()
+                        and current_y < rect_y.top()
+                    ):
+                        to = QPoint(rect_x.left() - self.rect_width, new_top_left.y())
+                        if current_y < rect_x.top():
+                            self.reset_collisions()
+                    elif (
+                        current_x < rect_x.left()
+                        and current_y > rect_y.top()
+                    ):
+                        to = QPoint(new_top_left.x(), rect_y.top() - self.rect_height)
+                        if new_top_left.x() < rect_y.left():
+                            self.reset_collisions()
+
+            if to is not None:
+                self.active_rectangle.moveTo(to)
+
             self.update()
 
 
@@ -200,22 +407,36 @@ class MainWindow(QWidget):
         return pos
 
 
-    def find_closest_rectangle(self, new_top_left: QPoint) -> Rectangle:
+    def find_closest_rectangle(self, top_left: QPoint) -> Rectangle:
+        """ The nearest rectangle lying on the path
+        from the active rectangle to the current cursor position. """
+
         current_top_left = self.active_rectangle.topLeft()
 
         area = QRect(
-            min(current_top_left.x(), new_top_left.x()),
-            min(current_top_left.y(), new_top_left.y()),
-            abs(current_top_left.x() - new_top_left.x()) + self.rect_width,
-            abs(current_top_left.y() - new_top_left.y()) + self.rect_height
+            min(current_top_left.x(), top_left.x()),
+            min(current_top_left.y(), top_left.y()),
+            abs(current_top_left.x() - top_left.x()) + self.rect_width,
+            abs(current_top_left.y() - top_left.y()) + self.rect_height
         )
 
-        closest_rectangle: Rectangle = None
         min_distance = float('inf')
+
+        closest_rectangle: Rectangle = None
 
         for rectangle in self.rectangles:
             if rectangle != self.active_rectangle:
-                rect: QRect = rectangle.rect
+                if (
+                    (
+                        self.collision_x is not None
+                        and self.collision_x.rectangle == rectangle
+                    ) or (
+                        self.collision_y is not None
+                        and self.collision_y.rectangle == rectangle
+                    )
+                ):
+                    continue
+                rect = rectangle.rect
                 if area.intersects(rect):
                     distance = (
                         (area.topLeft().x() - rect.topLeft().x()) ** 2
@@ -224,9 +445,14 @@ class MainWindow(QWidget):
 
                     if distance < min_distance:
                         min_distance = distance
-                        closest_rectangle = rect
+                        closest_rectangle = rectangle
 
         return closest_rectangle
+
+
+    def reset_collisions(self) -> None:
+        self.collision_x = None
+        self.collision_y = None
 
 
 if __name__ == '__main__':

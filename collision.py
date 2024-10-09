@@ -1,16 +1,14 @@
+from dataclasses import dataclass
+
 from rectangle import Rectangle
 
+
+@dataclass
 class Collision:
     LR = "LR"
     RL = "RL"
     TB = "TB"
     BT = "BT"
 
-
-    def __init__(
-        self,
-        rectangle: Rectangle,
-        direction: str,
-    ):
-        self.rectangle = rectangle
-        self.direction = direction
+    rectangle: Rectangle
+    direction: str
